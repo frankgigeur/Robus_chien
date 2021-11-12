@@ -1,0 +1,328 @@
+ // uint16_t position = qtr.readLineWhite(sensorValues);
+  //**************************************************************************************************************
+  if (Etape == 1) // Avant signal sonore
+  {
+    SuiveurLigneLoop();
+    soundDiff = SoundDifference();
+
+    if (soundDiff >= SOUND_THRESHOLD)
+    {
+      count_5khz += 1;
+
+      if (count_5khz > SOUND_COUNT) // Delai 10 ms, boucle 100 fois, donc son 5khz détecté durant 1000ms
+      {
+        digitalWrite(YELLOW_LED_PIN, HIGH);
+        digitalWrite(RED_LED_PIN, HIGH);
+        digitalWrite(BLUE_LED_PIN, HIGH);
+        Etape += 1;
+        Serial.println(Etape);
+        MotorsOff();
+        delay(500);
+      }
+    }
+    else
+    {
+      //count_5khz = 0;
+    }
+    delay(10);
+  }
+  //**************************************************************************************************************
+
+  //**************************************************************************************************************
+  if (Etape == 2) // Recherche Quille
+  {
+    SuiveurLigneLoop();
+
+    if (pinDetection() == true && Etape == 2)
+    {
+      TurnRightQuille();
+      digitalWrite(GREEN_LED_PIN, HIGH);
+      digitalWrite(YELLOW_LED_PIN, LOW);
+      digitalWrite(RED_LED_PIN, LOW);
+      digitalWrite(BLUE_LED_PIN, LOW);
+      Etape += 1;
+    }
+  }
+  //**************************************************************************************************************
+
+  //************************************ Retour  à ligne *****************************************
+  if ((sensorValues[0] > NOIR && Etape == 3) ||
+      (sensorValues[7] > NOIR && Etape == 3))
+  {
+    DirectionDroit(); // Retour vers la ligne blanche
+  }
+
+  if ((sensorValues[0] < NOIR2 && sensorValues[2] < NOIR2 && Etape == 3) ||
+      (sensorValues[6] < NOIR2 && sensorValues[7] < NOIR2 && Etape == 3)) // On a retouché la ligne
+  {
+    MotorsOff();
+    delay(1000);
+    digitalWrite(GREEN_LED_PIN, LOW);
+    SuiveurLigneHoraire();
+    Etape += 1;
+    Serial.print("ETAPE: ");
+    Serial.println(Etape);
+  }
+  //**************************************************************************************************************
+
+  //**************************************************************************************************************
+
+  if (Etape == 4) // Arrêt au ''T''
+  {
+    SuiveurLigneLoop(); // suit la ligne
+  }
+
+  if (sensorValues[0] < BLANC && sensorValues[1] < BLANC && sensorValues[2] < BLANC &&
+      sensorValues[3] < BLANC && Etape == 4) // si rendu au ''T'' vers carton de couleur
+  {
+    MotorsOff();
+    Etape += 1;
+    Serial.print("ETAPE: ");
+    Serial.println(Etape);
+  }
+  //**************************************************************************************************************
+
+  //**************************************************************************************************************
+  if (Etape == 5) // Positionnement et virage vers carton couleur
+  {
+    DirectionCouleur();
+    Etape += 1;
+    Serial.print("ETAPE: ");
+    Serial.println(Etape);
+  }
+  //**************************************************************************************************************
+
+  //**************************************************************************************************************
+  if (Etape == 6) // Avance vers carton couleur et arrêt
+  {
+    SuiveurLigneLoop();
+  }
+
+  if (sensorValues[2] > NOIR && sensorValues[3] > NOIR &&
+      sensorValues[4] > NOIR && sensorValues[5] > NOIR &&
+      Etape == 6)
+  {
+    MotorsOff();
+    delay(DelaisLent);
+    Etape += 1;
+    Serial.print("ETAPE: ");
+    Serial.println(Etape);
+  }
+  //**************************************************************************************************************
+
+  //**************************************************************************************************************
+  if (Etape == 7) // Lecture couleur Etape 7
+  {
+    uint16_t clear, red, green, blue;
+    // Lecture des filtres de couleur
+    tcs.setInterrupt(false); // turn on LED
+    delay(60);               // takes 50ms to read
+    tcs.getRawData(&red, &green, &blue, &clear);
+    tcs.setInterrupt(true); // turn off LED
+    uint32_t sum = clear;
+    float r, g, b;
+    r = red;
+    r /= sum;
+    g = green;
+    g /= sum;
+    b = blue;
+    b /= sum;
+    r *= 0xFF;
+    g *= 0xFF;
+    b *= 0xFF;
+    /*
+  Serial.print("\t");
+  Serial.print((int)r, HEX); Serial.print((int)g, HEX); Serial.print((int)b, HEX);
+  Serial.println();
+  */
+    if ((int)g < 0x50)
+    {
+      //Serial.println("Rouge!!");
+      colorDetected = RED;
+      digitalWrite(RED_LED_PIN, HIGH);
+    }
+    else if ((int)b < 0x50)
+    {
+      //Serial.println("Jaune!!");
+      colorDetected = YELLOW;
+      digitalWrite(YELLOW_LED_PIN, HIGH);
+    }
+    else
+    {
+      //Serial.println("Bleu!!");
+      colorDetected = BLUE;
+      digitalWrite(BLUE_LED_PIN, HIGH);
+    }
+    Set_angle_servos(ANGLE_HAUT);
+    Etape += 1;
+    Serial.print("ETAPE: ");
+    Serial.println(Etape);
+  }
+  //**************************************************************************************************************
+
+  //**************************************************************************************************************
+  if (Etape == 8) // Avancer vers la balle ETAPE 8
+  {
+    GoForward(30);
+    Etape += 1;
+  }
+
+  //**************************************************************************************************************
+
+  //**************************************************************************************************************
+  if (Etape == 9) // prendre la balle ETAPE 9
+  {
+    Set_angle_servos(ANGLE_BAS);
+    Etape += 1;
+  }
+  //**************************************************************************************************************
+
+  //**************************************************************************************************************
+  if (Etape == 10) // Aller Porter la balle Etape 10
+  {
+    bool etape10 = true;
+    if (colorDetected == BLUE && etape10)
+    {
+
+      //90 deg a gauche
+
+      TurnLeft(90);
+
+      //avance 45 cm
+      GoForward(45);
+
+      //90 deg a droite
+      TurnRight(90);
+
+      //avance 225 cm
+      GoForward(225);
+
+      //stop
+
+      etape10 = false;
+    }
+    else if (colorDetected == RED && etape10)
+    {
+
+      //avance 225 cm
+      GoForward(225);
+
+      //stop
+      etape10 = false;
+    }
+
+    else if (colorDetected == YELLOW && etape10)
+
+    {
+      //90 deg a droite
+      TurnRight(90);
+
+      //avance 45 cm
+      GoForward(45);
+
+      //90 deg a gauche
+      TurnLeft(90);
+
+      //avance 225 cm
+      GoForward(225);
+
+      //stop
+      etape10 = false;
+    }
+
+    Etape += 1;
+  }
+
+  //**************************************************************************************************************
+
+  //**************************************************************************************************************
+  if (Etape == 11) // Deposer la balle Etape 11
+  {
+    Set_angle_servos(ANGLE_HAUT);
+    Etape += 1;
+  }
+  //**************************************************************************************************************
+
+  //**************************************************************************************************************
+  if (Etape == 12) // Retour au cercle Etape 12
+  {
+    bool etape12 = true;
+    if (colorDetected == BLUE && etape12)
+    {
+      //180 deg
+      TurnLeft(180);
+
+      //avance 225 cm
+      GoForward(225);
+
+      //90 deg a gauche
+
+      TurnLeft(90);
+
+      //avance 45 cm
+      GoForward(45);
+
+      //90 deg a droite
+      TurnRight(90);
+
+      //avance 100 cm
+      GoForward(100);
+
+      //stop
+
+      etape12 = false;
+    }
+    else if (colorDetected == RED && etape12)
+    {
+      //180 deg
+      TurnLeft(180);
+
+      //avance 225 cm
+      GoForward(225);
+
+      //avance 100 cm
+      GoForward(100);
+
+      //stop
+      etape12 = false;
+    }
+
+    else if (colorDetected == YELLOW && etape12)
+
+    {
+
+      //180 deg
+      TurnLeft(180);
+
+      //avance 225 cm
+      GoForward(225);
+
+      //90 deg a droite
+      TurnRight(90);
+
+      //avance 45 cm
+      GoForward(45);
+
+      //90 deg a gauche
+      TurnLeft(90);
+
+      //avance 100 cm
+      GoForward(100);
+
+      //stop
+      etape12 = false;
+    }
+
+    Etape += 1;
+  }
+
+  //**************************************************************************************************************
+
+  //**************************************************************************************************************
+  if (Etape == 13) // Suiveur de ligne Etape 13
+  {
+    //SuiveurLigneLoop();
+    Etape += 1;
+  }
+  //**************************************************************************************************************
+}
